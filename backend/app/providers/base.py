@@ -34,3 +34,14 @@ class Provider(ABC):
     ) -> AsyncIterator[StreamEvent]:
         """Yield streaming events. Tool calls are dispatched server-side and
         their results are folded back into the same stream transparently."""
+
+    @abstractmethod
+    async def complete(
+        self,
+        messages: list[ChatMessage],
+        system: str | None = None,
+        max_tokens: int = 256,
+        temperature: float = 0.3,
+    ) -> str:
+        """One-shot non-streaming completion (no tool use). Used for
+        ancillary calls like generating a chat title."""

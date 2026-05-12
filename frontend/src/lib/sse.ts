@@ -73,3 +73,22 @@ export async function* streamChat(
 }
 
 export { API_BASE };
+
+export async function generateTitle(
+  messages: { role: 'user' | 'assistant' | 'system'; content: string }[],
+  signal?: AbortSignal,
+): Promise<string | null> {
+  try {
+    const res = await fetch(`${API_BASE}/title`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages }),
+      signal,
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { title?: string };
+    return data.title ?? null;
+  } catch {
+    return null;
+  }
+}

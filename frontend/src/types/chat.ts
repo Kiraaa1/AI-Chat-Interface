@@ -38,3 +38,11 @@ export type StreamEvent =
   | { type: 'tool_result'; id: string; name: string; result: unknown }
   | { type: 'done' }
   | { type: 'error'; message: string };
+
+export interface StoredConversation {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  messages: UiMessage[];
+}

@@ -27,6 +27,36 @@ class AnthropicProvider(Provider):
         super().__init__(api_key=api_key, default_model=default_model)
         self._client = AsyncAnthropic(api_key=api_key)
 
+    async def complete(
+        self,
+        messages: list[ChatMessage],
+        system: str | None = None,
+        max_tokens: int = 256,
+        temperature: float = 0.3,
+    ) -> str:
+        history: list[dict[str, Any]] = []
+        for m in messages:
+            if m.role == "system":
+                continue
+            history.append({"role": m.role, "content": m.content})
+
+        kwargs: dict[str, Any] = {
+            "model": self.default_model,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "messages": history,
+        }
+        if system:
+            kwargs["system"] = system
+
+        response = await self._client.messages.create(**kwargs)
+        parts: list[str] = []
+        for block in response.content:
+            text = getattr(block, "text", None)
+            if text:
+                parts.append(text)
+        return "".join(parts).strip()
+
     async def stream(
         self,
         messages: list[ChatMessage],

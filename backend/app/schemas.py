@@ -31,3 +31,11 @@ class HealthResponse(BaseModel):
     status: Literal["ok"]
     provider: str
     model: str
+
+
+class TitleRequest(BaseModel):
+    messages: list[ChatMessage] = Field(..., min_length=1)
+
+
+class TitleResponse(BaseModel):
+    title: str

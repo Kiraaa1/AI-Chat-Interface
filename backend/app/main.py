@@ -10,7 +10,12 @@ from sse_starlette.sse import EventSourceResponse
 
 from .config import get_settings
 from .providers import get_provider
-from .schemas import ChatRequest, HealthResponse
+from .schemas import (
+    ChatRequest,
+    HealthResponse,
+    TitleRequest,
+    TitleResponse,
+)
 
 logger = logging.getLogger("ai_chat_app")
 logging.basicConfig(level=logging.INFO)
@@ -74,3 +79,40 @@ async def chat(payload: ChatRequest, request: Request) -> EventSourceResponse:
             }
 
     return EventSourceResponse(event_generator(), ping=15)
+
+
+TITLE_SYSTEM_PROMPT = (
+    "You generate short titles for chat conversations. Given the first user "
+    "message and the assistant's reply, produce a 3 to 6 word title that "
+    "captures the topic. Respond with only the title text. No quotes, no "
+    "trailing punctuation, no markdown, no prefix like 'Title:'."
+)
+
+
+@app.post("/title", response_model=TitleResponse)
+async def title(payload: TitleRequest) -> TitleResponse:
+    """Generate a short title for a conversation from its opening exchange."""
+
+    try:
+        provider = get_provider()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    try:
+        raw = await provider.complete(
+            payload.messages,
+            system=TITLE_SYSTEM_PROMPT,
+            max_tokens=32,
+            temperature=0.3,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("title generation failed")
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    cleaned = raw.strip().strip('"').strip("'").rstrip(".").strip()
+    if not cleaned:
+        cleaned = "New chat"
+    if len(cleaned) > 60:
+        cleaned = cleaned[:57].rstrip() + "…"
+
+    return TitleResponse(title=cleaned)

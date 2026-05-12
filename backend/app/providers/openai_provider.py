@@ -26,6 +26,29 @@ class OpenAIProvider(Provider):
         super().__init__(api_key=api_key, default_model=default_model)
         self._client = AsyncOpenAI(api_key=api_key)
 
+    async def complete(
+        self,
+        messages: list[ChatMessage],
+        system: str | None = None,
+        max_tokens: int = 256,
+        temperature: float = 0.3,
+    ) -> str:
+        history: list[dict[str, Any]] = []
+        if system:
+            history.append({"role": "system", "content": system})
+        for m in messages:
+            history.append({"role": m.role, "content": m.content})
+
+        response = await self._client.chat.completions.create(
+            model=self.default_model,
+            messages=history,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=False,
+        )
+        choice = response.choices[0] if response.choices else None
+        return (choice.message.content or "").strip() if choice else ""
+
     async def stream(
         self,
         messages: list[ChatMessage],

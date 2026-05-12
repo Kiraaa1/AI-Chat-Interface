@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChatInput } from './components/ChatInput';
 import { Header } from './components/Header';
 import { Message } from './components/Message';
-import { API_BASE, streamChat } from './lib/sse';
+import { Sidebar } from './components/Sidebar';
+import { useConversations } from './hooks/useConversations';
+import { API_BASE, generateTitle, streamChat } from './lib/sse';
 import type {
   ChatMessage as ApiMessage,
   ToolEvent,
@@ -28,11 +30,25 @@ const SUGGESTIONS = [
 ];
 
 export default function App() {
-  const [messages, setMessages] = useState<UiMessage[]>([]);
+  const conv = useConversations();
+  const {
+    conversations,
+    currentId,
+    currentTitle,
+    messages,
+    setMessages,
+    newChat,
+    selectChat,
+    commit,
+    rename,
+    remove,
+  } = conv;
+
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [health, setHealth] = useState<Health | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -74,11 +90,9 @@ export default function App() {
 
   const updateMessage = useCallback(
     (id: string, fn: (prev: UiMessage) => UiMessage) => {
-      setMessages((prev) =>
-        prev.map((m) => (m.id === id ? fn(m) : m)),
-      );
+      setMessages((prev) => prev.map((m) => (m.id === id ? fn(m) : m)));
     },
-    [],
+    [setMessages],
   );
 
   const handleSend = useCallback(async () => {
@@ -112,6 +126,9 @@ export default function App() {
 
     const controller = new AbortController();
     abortRef.current = controller;
+
+    let streamErrored = false;
+    let userAborted = false;
 
     try {
       for await (const ev of streamChat(
@@ -159,6 +176,7 @@ export default function App() {
             break;
           }
           case 'error': {
+            streamErrored = true;
             updateMessage(assistantId, (m) => ({
               ...m,
               status: 'error',
@@ -180,72 +198,121 @@ export default function App() {
         m.status === 'streaming' ? { ...m, status: 'done' } : m,
       );
     } catch (err) {
-      const aborted =
-        err instanceof DOMException && err.name === 'AbortError';
+      const aborted = err instanceof DOMException && err.name === 'AbortError';
+      userAborted = aborted;
+      if (!aborted) streamErrored = true;
       updateMessage(assistantId, (m) => ({
         ...m,
         status: aborted ? 'done' : 'error',
-        errorText: aborted
-          ? undefined
-          : err instanceof Error
-            ? err.message
-            : String(err),
+        errorText:
+          aborted
+            ? undefined
+            : err instanceof Error
+              ? err.message
+              : String(err),
       }));
     } finally {
       abortRef.current = null;
       setBusy(false);
     }
-  }, [apiHistory, busy, draft, updateMessage]);
+
+    const result = await commit();
+    if (result?.isFirstTurn && !streamErrored && !userAborted) {
+      const finalAssistant =
+        result.messages.find((m) => m.id === assistantId)?.content.trim() ?? '';
+      if (finalAssistant) {
+        generateTitle([
+          { role: 'user', content: text },
+          { role: 'assistant', content: finalAssistant },
+        ])
+          .then((title) => {
+            if (title && title.toLowerCase() !== 'new chat') {
+              void rename(result.id, title);
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  }, [apiHistory, busy, commit, draft, rename, setMessages, updateMessage]);
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
   }, []);
 
-  const handleClear = useCallback(() => {
+  const handleNewChat = useCallback(() => {
     abortRef.current?.abort();
-    setMessages([]);
-  }, []);
+    abortRef.current = null;
+    setBusy(false);
+    newChat();
+  }, [newChat]);
+
+  const handleSelect = useCallback(
+    (id: string) => {
+      abortRef.current?.abort();
+      abortRef.current = null;
+      setBusy(false);
+      void selectChat(id);
+    },
+    [selectChat],
+  );
 
   return (
-    <div className="mx-auto flex h-full max-w-3xl flex-col">
-      <Header
-        health={health}
-        onClear={handleClear}
-        canClear={messages.length > 0 && !busy}
+    <div className="flex h-full">
+      <Sidebar
+        conversations={conversations}
+        currentId={currentId}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        onNewChat={handleNewChat}
+        onSelect={handleSelect}
+        onRename={(id, title) => void rename(id, title)}
+        onDelete={(id) => void remove(id)}
       />
 
-      {healthError && (
-        <div className="mx-4 mt-3 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
-          Couldn't reach the backend at <code>{API_BASE}</code> ({healthError}).
-          Is it running?
-        </div>
-      )}
-
-      <div
-        ref={scrollRef}
-        className="scrollbar-thin flex-1 space-y-4 overflow-y-auto px-4 py-6 sm:px-6"
-      >
-        {messages.length === 0 ? (
-          <EmptyState onPick={(s) => setDraft(s)} />
-        ) : (
-          messages.map((m) => <Message key={m.id} message={m} />)
-        )}
-      </div>
-
-      <div className="border-t border-slate-800/60 bg-slate-950/40 px-4 pb-5 pt-3 sm:px-6">
-        <ChatInput
-          value={draft}
-          onChange={setDraft}
-          onSubmit={handleSend}
-          onStop={handleStop}
-          busy={busy}
-          disabled={!!healthError}
+      <main className="flex min-w-0 flex-1 flex-col">
+        <Header
+          health={health}
+          title={currentTitle}
+          onToggleSidebar={() => setSidebarOpen((v) => !v)}
         />
-        <p className="mt-2 text-center text-[11px] text-slate-500">
-          Streaming via SSE · Tools are dispatched server-side and folded back
-          into the stream.
-        </p>
-      </div>
+
+        {healthError && (
+          <div className="mx-4 mt-3 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
+            Couldn't reach the backend at <code>{API_BASE}</code> ({healthError}).
+            Is it running?
+          </div>
+        )}
+
+        <div
+          ref={scrollRef}
+          className="scrollbar-thin flex-1 overflow-y-auto px-4 py-6 sm:px-6"
+        >
+          <div className="mx-auto max-w-3xl space-y-4">
+            {messages.length === 0 ? (
+              <EmptyState onPick={(s) => setDraft(s)} />
+            ) : (
+              messages.map((m) => <Message key={m.id} message={m} />)
+            )}
+          </div>
+        </div>
+
+        <div className="border-t border-slate-800/60 bg-slate-950/40 px-4 pb-5 pt-3 sm:px-6">
+          <div className="mx-auto max-w-3xl">
+            <ChatInput
+              value={draft}
+              onChange={setDraft}
+              onSubmit={handleSend}
+              onStop={handleStop}
+              busy={busy}
+              disabled={!!healthError}
+            />
+            <p className="mt-2 text-center text-[11px] text-slate-500">
+              Streaming via SSE · Tools dispatched server-side and folded back
+              into the stream.
+            </p>
+          </div>
+        </div>
+      </main>
     </div>
   );
 }
@@ -287,3 +354,4 @@ function EmptyState({ onPick }: EmptyStateProps) {
     </div>
   );
 }
+
