@@ -1,0 +1,21 @@
+# Sample Fly.io config. Run `fly launch --no-deploy` to generate one tied to
+# your account, or `fly deploy` after editing the app name below.
+app = "ai-chat-app-backend"
+primary_region = "iad"
+
+[build]
+
+[env]
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512
