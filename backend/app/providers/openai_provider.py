@@ -43,7 +43,7 @@ class OpenAIProvider(Provider):
             model=self.default_model,
             messages=history,
             temperature=temperature,
-            max_tokens=max_tokens,
+            max_completion_tokens=max_tokens,
             stream=False,
         )
         choice = response.choices[0] if response.choices else None
