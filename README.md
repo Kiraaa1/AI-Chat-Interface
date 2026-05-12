@@ -4,8 +4,8 @@ A full-stack streaming chat app: FastAPI backend (OpenAI **or** Anthropic, switc
 via env var) with server-side tool calling, and a React 18 + Vite + Tailwind
 frontend that renders tokens in real time over Server-Sent Events.
 
-> **Live demo:** _coming soon_ — replace this placeholder with your deployed
-> URL once the frontend is on Vercel and the backend is on Railway/Fly.
+> **Live demo:** _coming soon_ (replace this placeholder with your deployed
+> URL once the frontend is on Vercel and the backend is on Railway/Fly)
 
 ---
 
@@ -14,11 +14,11 @@ frontend that renders tokens in real time over Server-Sent Events.
 - **Token streaming** end-to-end: SSE from FastAPI, parsed incrementally on the
   client and rendered as the model types.
 - **Two LLM providers**, picked by the `LLM_PROVIDER` env var:
-  - `openai` (default) — uses the chat completions streaming API.
-  - `anthropic` — uses the Messages streaming API.
+  - `openai` (default): uses the chat completions streaming API.
+  - `anthropic`: uses the Messages streaming API.
 - **Server-side tool calling** with two real tools:
-  - `get_current_time(timezone_name?)` — IANA-aware timestamps.
-  - `web_search(query, max_results?)` — Tavily if `TAVILY_API_KEY` is set,
+  - `get_current_time(timezone_name?)`: IANA-aware timestamps.
+  - `web_search(query, max_results?)`: Tavily if `TAVILY_API_KEY` is set,
     otherwise DuckDuckGo via the `ddgs` package (no key required).
 - **Tool round-trips are invisible to the client.** The backend runs the
   multi-turn loop (LLM → tool call → tool result → LLM …) and the same SSE
@@ -185,8 +185,8 @@ Each provider implementation in `backend/app/providers/` runs the tool loop
    user's perspective: tokens, then a brief "Searching the web…" chip, then
    more tokens. No client-side orchestration required.
 
-This keeps the protocol uniform — the frontend doesn't need to know the
-difference between OpenAI's and Anthropic's tool-call formats — and means
+This keeps the protocol uniform: the frontend doesn't need to know the
+difference between OpenAI's and Anthropic's tool-call formats, and it means
 adding a new tool is one entry in `TOOLS` plus a JSON Schema. Both
 provider-specific tool spec formats are derived from the same registry.
 
@@ -197,6 +197,6 @@ provider-specific tool spec formats are derived from the same registry.
   not part of the persisted client history.
 - **`sse-starlette`** for the SSE response so we get heartbeat pings (every
   15 s) and disconnect detection without rolling our own.
-- **No component library** on the frontend — the chat surface is small enough
+- **No component library** on the frontend: the chat surface is small enough
   that hand-rolled Tailwind components stay readable, and the bundle stays
   ~50 kB gzipped.
